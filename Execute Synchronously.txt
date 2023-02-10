@@ -1,0 +1,47 @@
+{
+  "Id": "Test",
+  "Version": 1,
+  "Steps": [
+    {
+      "Id": "Step1",
+      "StepType": "HttpPostRequest",
+      "Inputs": 
+      {
+	"Url": "\"https://dev.arvato-payment.de/v7.1.999/api/token\"",
+        "Content": "\"{'password':'ToscaTest1234!','UserName':'ToscaStripeTest','grant_type':'password'}\"",
+	"RequestContentType": "\"FormUrlEncoded\"",
+	"ResponseType": "\"JSON\""
+      },
+      "Outputs": { 
+          "ResponseCode": "step.ResponseCode",
+          "ResponseContent": "step.ResponseContent"
+      },
+      "NextStepId": "Step2"
+    },
+    {
+      "Id": "Step2",
+      "StepType": "HttpGetRequest",
+      "Inputs": 
+      {
+	"Url": "\"https://dev.arvato-payment.de/v7.1.999/api/transactions/{{token}}\"",
+        "UrlParams": "\"{'token':'117710'}\"",
+	"Bearer": "data.ResponseContent.access_token",
+	"ResponseType": "\"JSON\""
+      },
+      "Outputs": { 
+          "ResponseCode": "step.ResponseCode",
+          "ResponseContent": "step.ResponseContent"
+      },
+      "NextStepId": "Step3"
+    },         
+    {
+      "Id": "Step3",
+      "StepType": "HttpJsonResponse",
+      "Inputs": 
+      {
+	"ResponseCode": "data.ResponseCode",
+	"ResponseContent": "data.ResponseContent"
+      }
+    }
+  ]
+}

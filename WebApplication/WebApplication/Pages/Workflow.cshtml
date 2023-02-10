@@ -1,0 +1,22 @@
+﻿@page "{wid}/{wv:int}"
+@model WebApplication.Pages.WorkflowModel
+@{
+    ViewData["Title"] = "Workflow";
+    Layout = null;
+}
+
+<form method="post">
+    <div style="display: inline-block; width: 100px;">
+        Workflow Id:
+    </div>
+    <input asp-for="WorkflowId" />
+    <br />
+
+    <div style="display: inline-block; width: 100px;">
+        Version:
+    </div>
+    <input asp-for="WorkflowVersion" />
+    <br />
+    
+    <input type="submit" value="Execute">
+</form>

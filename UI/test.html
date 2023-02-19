@@ -1,0 +1,515 @@
+<html>
+<head>
+    <title>snap test</title>
+    <script src="jquery-3.6.3.js"></script>
+    <script src="snap.svg.js"></script>
+
+    <style type="text/css">
+    </style>
+
+    <script type="text/javascript">
+
+        var SVGType = {
+            Text: "Text",
+            Rectangle: "Rectangle",
+            Connection: "Connection"
+        };
+
+        var SVGTag = {
+            Step: "Step"
+        };
+
+        var stepManager = new StepManager();
+        function StepManager() {
+            this.Steps = [];
+
+            this.AddStep = function (step) {
+
+                var stepFrom = null;
+                if (this.Steps.length != 0)
+                    stepFrom = this.GetLastStep();
+
+                this.Steps.push(step);
+
+                if (stepFrom) {
+                    var connection = new SVGConnection(canvas, stepFrom, step);
+                    stepFrom.ConnectTo(step, connection);
+                    step.ConnectBackTo(stepFrom, connection);
+                    connection.Render();
+                }
+            };
+
+            this.GetLastStep = function () {
+
+                return this.Steps[this.Steps.length - 1];
+            };
+        };
+
+
+        Step = function () {
+            function Step(svg, data) {
+
+                this.SVG = svg;
+                this.SVGForwardConnection;
+                this.SVGBackwardConnection;
+
+                this.Data = data;
+
+                this.NextStep;
+                this.PrevStep;
+            }
+
+            Step.prototype.ConnectTo = function (nextStep, forwardConnection) {
+                this.NextStep = nextStep;
+                this.SVGForwardConnection = forwardConnection;
+            };
+
+            Step.prototype.ConnectBackTo = function (prevStep, backwardConnection) {
+                this.PrevStep = prevStep;
+                this.SVGBackwardConnection = backwardConnection;
+            };
+
+            return Step;
+        }();
+
+
+        SVGShape = function () {
+            function SVGShape(canvas, type, x, y) {
+                this.Canvas = canvas;
+                
+                this.SVG;
+                this.Type = type;
+                this.X = x;
+                this.Y = y;
+
+                this.Tag = {};
+
+                this.Fill = "#ffffff";
+                this.Stroke = "#000000";
+                this.StrokeWidth = 1;
+            };
+
+            SVGShape.prototype.SetTag = function (key, value) {
+                this.Shape.Tag[key] = value;
+            };
+
+            SVGShape.prototype.GetTag = function (key) {
+                return this.Shape.Tag[key];
+            };
+
+            SVGShape.prototype.SetXY = function (x, y) {
+                this.Shape.X = x;
+                this.Shape.Y = y;
+            };
+
+            SVGShape.prototype.GetXY = function () {
+                return { X: this.Shape.X, Y: this.Shape.Y };
+            };
+
+            return SVGShape;
+        }();
+
+        SVGDraggableShape = function () {
+
+            function SVGDraggableShape() { };
+
+            SVGDraggableShape.prototype = new SVGShape();
+            SVGDraggableShape.prototype.Draggable = function (onMove, onStart, onEnd) {
+
+                var self = this;
+                this.Shape.SVG.drag(
+                    function (dx, dy, x, y) {
+                        // move
+
+                        var origin = this.data("origin");
+                        self.SetXY(parseInt(origin.x) + dx, parseInt(origin.y) + dy);
+
+                        var originTransform = this.data("originTransform");
+                        this.attr({
+                            transform: originTransform + (originTransform ? "T" : "t") + [dx, dy]
+                        });
+
+                        if (onMove)
+                            onMove(dx, dy, x, y, self);
+                    },
+                    function (x, y, ev) {
+                        // start
+
+                        var xy = self.GetXY();
+                        this.data("origin", { x: xy.X, y: xy.Y });
+                        this.data("originTransform", this.transform().local);
+
+                        if (onStart)
+                            onStart(x, y, ev, self);
+                    },
+                    function (ev) {
+                        // end
+                        var xy = self.GetXY();
+                        self.Shape.SVG.attr({ x: xy.X, y: xy.Y });
+
+                        if (onEnd)
+                            onEnd(ev, self);
+                    });
+            };
+
+            return SVGDraggableShape;
+        }();
+
+        SVGText = function () {
+            function SVGText(canvas, text, x, y) {
+
+                this.Shape = new SVGShape(canvas, SVGType.Text, x || 60, y || 60)
+                this.Text = text;
+
+                this.Shape.Fill = "#000000";
+
+                this.IsRendered = false;
+            };
+            SVGText.prototype = new SVGShape();
+            SVGText.prototype.Render = function (forceRender) {
+
+                if (this.IsRendered && !forceRender)
+                    return;
+
+                this.IsRendered = true;
+
+                var textXY = this.GetXY();
+                this.Shape.SVG = this.Shape.Canvas.text(textXY.X, textXY.Y, this.Text);
+                this.Shape.SVG.attr({
+                    fill: this.Shape.Fill
+                });
+            };
+
+            return SVGText;
+        }();
+
+        SVGRectangle = function () {
+            function SVGRectangle(canvas, text, x, y) {
+                this.Shape = new SVGShape(canvas, SVGType.Rectangle, x || 40, y || 40)
+
+                this.SVGRectangle;
+
+                var xy = this.GetXY();
+                this.SVGText = text ? new SVGText(this.Shape.Canvas, text, xy.X + 15, xy.Y + 27) : null;
+
+                this.Width = 200;
+                this.Height = 50;
+                this.RadiusCorner = 10;
+
+                this.IsRendered = false;
+            };
+            SVGRectangle.prototype = new SVGDraggableShape();
+            SVGRectangle.prototype.Render = function (forceRender) {
+
+                if (this.IsRendered && !forceRender)
+                    return;
+
+                this.IsRendered = true;
+
+                var recXY = this.GetXY();
+                this.SVGRectangle = this.Shape.Canvas.rect(recXY.X, recXY.Y, this.Width, this.Height, this.RadiusCorner);
+                this.SVGRectangle.attr({
+                    fill: this.Shape.Fill,
+                    stroke: this.Shape.Stroke,
+                    strokeWidth: this.Shape.StrokeWidth
+                });
+
+                if (this.SVGText) {
+                    this.SVGText.Render();
+                    this.Shape.SVG = this.Shape.Canvas.group(this.SVGRectangle, this.SVGText.Shape.SVG);
+                }
+                else
+                    this.Shape.SVG = this.SVGRectangle;
+
+                this.Draggable(function (dx, dy, x, y, self) {
+                        // onmove
+
+                        var step = self.GetTag(SVGTag.Step);
+
+                        if (step.SVGBackwardConnection)
+                            step.SVGBackwardConnection.Render(true);
+
+                        if (step.SVGForwardConnection)
+                            step.SVGForwardConnection.Render(true);
+                    },
+                    null,
+                    function (ev, self) {
+                        // onEnd
+
+                        if (self.SVGText) {
+                            var xy = self.GetXY();
+                            self.SVGText.SetXY(xy.X, xy.Y)
+                        }
+                });
+            };
+
+            return SVGRectangle;
+        }();
+
+        SVGConnection = function () {
+            function SVGConnection(canvas, stepFrom, stepTo) {
+                this.Shape = new SVGShape(canvas, SVGType.Connection, null, null);
+                this.Shape.Fill = "#000000";
+
+                this.StepFrom = stepFrom;
+                this.StepTo = stepTo;
+
+                this.IsRendered = false;
+            };
+
+            SVGConnection.prototype = SVGShape.prototype;
+
+            SVGConnection.prototype.Render = function (forceRender) {
+
+                if (this.IsRendered && !forceRender)
+                    return;
+
+                this.IsRendered = true;
+
+                var points = getFromToPoint(this.StepFrom, this.StepTo);
+
+                if (!this.Shape.SVG) {
+                    this.Shape.SVG = this.Shape.Canvas.line(points.X1, points.Y1, points.X2, points.Y2);
+                    this.Shape.SVG.attr({
+                        fill: this.Shape.Fill,
+                        stroke: this.Shape.Stroke,
+                        strokeWidth: this.Shape.StrokeWidth
+                    });
+                }
+                else {
+                    this.Shape.SVG.attr({
+                        fill: this.Shape.Fill,
+                        stroke: this.Shape.Stroke,
+                        strokeWidth: this.Shape.StrokeWidth,
+                        x1: points.X1,
+                        y1: points.Y1,
+                        x2: points.X2,
+                        y2: points.Y2
+                    });
+                }
+            };
+
+            function getFromToPoint(stepFrom, stepTo) {
+
+                var fromXY = stepFrom.SVG.GetXY();
+                var x1 = fromXY.X + (stepFrom.SVG.Width / 2);
+                var y1 = fromXY.Y + stepFrom.SVG.Height;
+
+                var toXY = stepTo.SVG.GetXY();
+                var x2 = toXY.X + (stepTo.SVG.Width / 2);
+                var y2 = toXY.Y;
+
+                return { X1: x1, Y1: y1, X2: x2, Y2: y2 };
+            };
+
+            return SVGConnection;
+        }();
+
+
+        function DialogForm(content_id, getDataHandler, resetFormHandler) {
+            this.Id = content_id;
+            this.ContentElement = $("#" + this.Id);
+            this.GetData = getDataHandler;
+            this.ResetForm = resetFormHandler;
+        }
+
+        Dialog = function () {
+            function Dialog(id, container_id, ok_input_id, cancel_input_id) {
+                var self = this;
+
+                this.Id = id;
+                this.Element = $("#" + id);
+                this.ContainerElement = $("#" + container_id);
+                this.CurrentForm = null;
+                this.OKElement = $("#" + ok_input_id);
+                this.CancelElement = $("#" + cancel_input_id);
+                this.OnOKHandler;
+                this.OnCancelHandler;
+
+                this._isShowing = false;
+
+
+                self.OKElement.click(function () {
+                    self.Hide();
+                    if (self.OnOKHandler) self.OnOKHandler({ Form: self.CurrentForm.GetData() });
+                });
+
+                self.CancelElement.click(function () {
+                    self.Hide();
+                    if (self.OnCancelHandler) self.OnCancelHandler();
+                });
+            };
+
+            Dialog.prototype.LoadContent = function (form) {
+
+                if (this.CurrentForm && this.CurrentForm.Id == form.Id)
+                    return this;
+
+                this.CurrentForm = form;
+                return this;
+            };
+
+            Dialog.prototype.UnloadContent = function () {
+                this.CurrentForm = null;
+                return this;
+            };
+
+            Dialog.prototype.Show = function (form) {
+                this._isShowing = true;
+                this.Render();
+                return this;
+            };
+
+            Dialog.prototype.Hide = function () {
+                this._isShowing = false;
+                this.Render();
+                return this;
+            };
+
+            Dialog.prototype.SetOnOK = function (handler) {
+                this.OnOKHandler = handler;
+                return this;
+            };
+
+            Dialog.prototype.SetOnCancelHandler = function (handler) {
+                this.OnCancelHandler = handler;
+                return this;
+            };
+
+            Dialog.prototype.Render = function () {
+
+                if (this.CurrentForm != null) {
+                    this.CurrentForm.ContentElement.show();
+                    this.ContainerElement.html(this.CurrentForm.ContentElement);
+                }
+                else {
+                    this.ContainerElement.html("");
+                }
+
+                if (this._isShowing) {
+                    this.Element.show();
+                    this.CurrentForm.ResetForm();
+                }
+                else
+                    this.Element.hide();
+
+                return this;
+            };
+
+
+            return Dialog;
+        }();
+
+
+        var dialog;
+        var canvas;
+        $(document).ready(function () {
+
+            InitDialog();
+            InitHttpRequestActivityInput();
+            InitSVG();
+        });
+
+
+        function InitDialog() {
+            dialog = new Dialog("div_dialog", "td_content", "dialog_input_ok", "dialog_input_cancel");
+        };
+
+
+        function InitHttpRequestActivityInput() {
+
+            var form = GetHttpRequestActivityForm();
+
+            $("#input_httpRequestActivity").click(function () {
+                dialog
+                    .SetOnOK(function (e) { CreateHttpRequestActivitySVGStep(e.Form); })
+                    .LoadContent(form)
+                    .Show();
+            });
+        };
+        function GetHttpRequestActivityForm() {
+
+            return new DialogForm("table_httpRequestActivity_form",
+                function () {
+                    // GetData Handler
+                    return {
+                        Title: $("#input_title").val()
+                    };
+                },
+                function () {
+                    // Reset handler
+                    $("#input_title").val("");
+                });
+        };
+        function CreateHttpRequestActivitySVGStep(formData) {
+
+            var prevStep = stepManager.GetLastStep();
+            var xy = prevStep.SVG.GetXY();
+            AddNewRectangleStep({ type: "httpRequest", data: formData }, formData.Title, xy.X, xy.Y + 100);
+        };
+
+        function InitSVG() {
+            canvas = Snap("#Canvas");
+            AddNewRectangleStep({ type: "start", data: {} }, "Start", 280, 20);
+        };
+
+        function AddNewRectangleStep(data, text, x, y) {
+
+            var svg = new SVGRectangle(canvas, text, x, y);
+            var step = new Step(svg, data);
+            svg.SetTag(SVGTag.Step, step);
+            svg.Render();
+            stepManager.AddStep(step);
+        };
+
+    </script>
+</head>
+<body>
+    <table cellpadding="0" cellspacing="0" border="0">
+        <tr>
+            <td style="width: 150px; vertical-align: top; text-align: center;">
+                <table cellpadding="0" cellspacing="0" border="0"
+                       style="width: 100%;">
+                    <tr>
+                        <td>
+                            <input type="button" id="input_httpRequestActivity" value="HttpRequest Activity" />
+                        </td>
+                    </tr>
+                </table>
+            </td>
+            <td style="border: thin solid gray;">
+                <table cellpadding="0" cellspacing="0" border="0"
+                       style="width: 800px; height: 600px;">
+                    <tr>
+                        <td>
+                            <svg id="Canvas" width="100%" height="100%" style="background-color: lightgray;"></svg>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+    <div id="div_dialog" style="display: none; position: absolute; left: 0; right: 0; top: 0; bottom: 0; margin: auto; background-color: white; border: thin solid black; width: 500px; height: 100px;">
+        <table cellpadding="0" cellspacing="0" border="0" style="width: 100%; height: 100%">
+            <tr>
+                <td id="td_content" style="vertical-align: top; padding:10px 0px 0px 5px;"></td>
+            </tr>
+            <tr>
+                <td style="height: 50px; padding-right: 10px; text-align: right; border-top: thin solid gray;">
+                    <input type="button" id="dialog_input_ok" value="OK" style="width: 70px;" />
+                    <input type="button" id="dialog_input_cancel" value="Cancel" style="width: 70px;" />
+                </td>
+            </tr>
+        </table>
+    </div>
+    <table id="table_httpRequestActivity_form" cellpadding="0" cellspacing="0" border="0"
+           style="display: none;">
+        <tr>
+            <td>Title:</td>
+            <td>
+                <input id="input_title" type="text" />
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
